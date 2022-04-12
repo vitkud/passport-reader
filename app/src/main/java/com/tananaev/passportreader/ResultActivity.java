@@ -18,8 +18,18 @@ package com.tananaev.passportreader;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
+
+import android.os.Environment;
+import android.util.Log;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class ResultActivity extends AppCompatActivity {
 
@@ -32,6 +42,7 @@ public class ResultActivity extends AppCompatActivity {
     public static final String KEY_PHOTO_BASE64 = "photoBase64";
     public static final String KEY_PASSIVE_AUTH = "passiveAuth";
     public static final String KEY_CHIP_AUTH = "chipAuth";
+    public static final String KEY_ALL_FILES = "allFiles";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,6 +60,27 @@ public class ResultActivity extends AppCompatActivity {
         if (getIntent().hasExtra(KEY_PHOTO)) {
             ((ImageView) findViewById(R.id.view_photo)).setImageBitmap((Bitmap) getIntent().getParcelableExtra(KEY_PHOTO));
         }
+
+        Button btnSave = findViewById(R.id.button_save);
+        btnSave.setOnClickListener((view) -> {
+            File root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            File saveDir = new File(root, "ePassportData-" +
+                    new SimpleDateFormat("yyyy_MM_dd_HH_mm_ss", Locale.US).format(new Date()));
+            if (!saveDir.exists())
+                saveDir.mkdirs();
+            for (ParcelableFile parcelableFile: getIntent().<ParcelableFile>getParcelableArrayListExtra(KEY_ALL_FILES)) {
+                File file = new File (saveDir, parcelableFile.getName());
+                if (file.exists())
+                    file.delete();
+                try (FileOutputStream outputStream = new FileOutputStream(file)) {
+                    outputStream.write(parcelableFile.getData());
+                    outputStream.flush();
+                } catch (Exception e) {
+                    Log.e("Exception", "File write failed: " + e);
+                }
+            }
+        });
+
     }
 
 }

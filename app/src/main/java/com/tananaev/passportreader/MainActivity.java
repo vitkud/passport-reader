@@ -41,6 +41,8 @@ import com.wdullaer.materialdatetimepicker.date.DatePickerDialog;
 
 import net.sf.scuba.smartcards.CardFileInputStream;
 import net.sf.scuba.smartcards.CardService;
+import net.sf.scuba.smartcards.CardServiceException;
+import net.sf.scuba.smartcards.ISO7816;
 
 import org.apache.commons.io.IOUtils;
 import org.bouncycastle.asn1.ASN1InputStream;
@@ -52,6 +54,8 @@ import org.jmrtd.BACKey;
 import org.jmrtd.BACKeySpec;
 import org.jmrtd.PassportService;
 import org.jmrtd.lds.ChipAuthenticationPublicKeyInfo;
+import org.jmrtd.lds.LDSFile;
+import org.jmrtd.lds.LDSFileUtil;
 import org.jmrtd.lds.SODFile;
 import org.jmrtd.lds.CardAccessFile;
 import org.jmrtd.lds.SecurityInfo;
@@ -66,8 +70,11 @@ import org.jmrtd.lds.PACEInfo;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.PublicKey;
@@ -349,6 +356,7 @@ public class MainActivity extends AppCompatActivity {
         private Bitmap bitmap;
         private boolean chipAuthSucceeded = false;
         private boolean passiveAuthSuccess = false;
+        private ArrayList<ParcelableFile> allFiles;
 
         private byte[] dg14Encoded = new byte[0];
 
@@ -520,10 +528,87 @@ public class MainActivity extends AppCompatActivity {
                     imageBase64 = Base64.encodeToString(buffer, Base64.DEFAULT);
                 }
 
+                allFiles = new ArrayList<>();
+
+                int no = 0;
+                for (FaceImageInfo faceImageInfo: allFaceImageInfos) {
+                    try (InputStream inputStream = faceImageInfo.getImageInputStream()) {
+                        allFiles.add(new ParcelableFile("Photo" + ++no + ".j2k", IOUtils.toByteArray(inputStream)));
+                    }
+                }
+
+                MRZInfo mrzInfo = dg1File.getMRZInfo();
+                String mrzText = "";
+                mrzText += "documentCode: " + mrzInfo.getDocumentCode() + "\n";
+                mrzText += "issuingState: " + mrzInfo.getIssuingState() + "\n";
+                mrzText += "primaryIdentifier: " + mrzInfo.getPrimaryIdentifier() + "\n";
+                mrzText += "secondaryIdentifier: " + mrzInfo.getSecondaryIdentifier() + "\n";
+                mrzText += "nationality: " + mrzInfo.getNationality() + "\n";
+                mrzText += "documentNumber: " + mrzInfo.getDocumentNumber() + "\n";
+                mrzText += "dateOfBirth: " + mrzInfo.getDateOfBirth() + "\n";
+                mrzText += "gender: " + mrzInfo.getGender().toString() + "\n";
+                mrzText += "dateOfExpiry: " + mrzInfo.getDateOfExpiry() + "\n";
+                mrzText += "optionalData1: " + mrzInfo.getOptionalData1() + "\n";
+                mrzText += "optionalData2: " + mrzInfo.getOptionalData2() + "\n";
+                allFiles.add(new ParcelableFile("MRZ.txt", mrzText.getBytes("UTF-8")));
+                allFiles.add(new ParcelableFile("MRZ.dat", mrzInfo.getEncoded()));
+
+                tryReadFile(service, PassportService.EF_DG1, "EF_DG1-MRZ.bin");
+                tryReadFile(service, PassportService.EF_DG2, "EF_DG2-face_image_data.bin");
+                tryReadFile(service, PassportService.EF_DG3, "EF_DG3-finger_print_data.bin");
+                tryReadFile(service, PassportService.EF_DG4, "EF_DG4-iris_data.bin");
+                tryReadFile(service, PassportService.EF_DG5, "EF_DG5-displayed_portrait.bin");
+                tryReadFile(service, PassportService.EF_DG6, "EF_DG6-RFU.bin");
+                tryReadFile(service, PassportService.EF_DG7, "EF_DG7-displayed_signature.bin");
+                tryReadFile(service, PassportService.EF_DG8, "EF_DG8-data_features.bin");
+                tryReadFile(service, PassportService.EF_DG9, "EF_DG9-structure_features.bin");
+                tryReadFile(service, PassportService.EF_DG10, "EF_DG10-substance_features.bin");
+                tryReadFile(service, PassportService.EF_DG11, "EF_DG11-additional_personal_details.bin");
+                tryReadFile(service, PassportService.EF_DG12, "EF_DG12-additional_document_details.bin");
+                tryReadFile(service, PassportService.EF_DG13, "EF_DG13-optional_details.bin");
+                tryReadFile(service, PassportService.EF_DG14, "EF_DG14-security_infos.bin");
+                tryReadFile(service, PassportService.EF_DG15, "EF_DG15-public_key_used_for_Active_Authentication.bin");
+                tryReadFile(service, PassportService.EF_DG16, "EF_DG16-person(s)_to_notify.bin");
+                tryReadFile(service, PassportService.EF_SOD, "EF_SOD-security_document.bin");
+                tryReadFile(service, PassportService.EF_COM, "EF_COM-data_group_presence_list.bin");
+                tryReadFile(service, PassportService.EF_CVCA, "EF_CVCA-EAC_CVA_references.bin");
+                tryReadFile(service, PassportService.SFI_CARD_ACCESS, "SFI_CARD_ACCESS.bin");
+                tryReadFile(service, PassportService.SFI_CARD_SECURITY, "SFI_CARD_SECURITY.bin");
+                tryReadFile(service, PassportService.SFI_DG1, "SFI_DG1.bin");
+                tryReadFile(service, PassportService.SFI_DG2, "SFI_DG2.bin");
+                tryReadFile(service, PassportService.SFI_DG3, "SFI_DG3.bin");
+                tryReadFile(service, PassportService.SFI_DG4, "SFI_DG4.bin");
+                tryReadFile(service, PassportService.SFI_DG5, "SFI_DG5.bin");
+                tryReadFile(service, PassportService.SFI_DG6, "SFI_DG6.bin");
+                tryReadFile(service, PassportService.SFI_DG7, "SFI_DG7.bin");
+                tryReadFile(service, PassportService.SFI_DG8, "SFI_DG8.bin");
+                tryReadFile(service, PassportService.SFI_DG9, "SFI_DG9.bin");
+                tryReadFile(service, PassportService.SFI_DG10, "SFI_DG10.bin");
+                tryReadFile(service, PassportService.SFI_DG11, "SFI_DG11.bin");
+                tryReadFile(service, PassportService.SFI_DG12, "SFI_DG12.bin");
+                tryReadFile(service, PassportService.SFI_DG13, "SFI_DG13.bin");
+                tryReadFile(service, PassportService.SFI_DG14, "SFI_DG14.bin");
+                tryReadFile(service, PassportService.SFI_DG15, "SFI_DG15.bin");
+                tryReadFile(service, PassportService.SFI_DG16, "SFI_DG16.bin");
+                tryReadFile(service, PassportService.SFI_COM, "SFI_COM.bin");
+                tryReadFile(service, PassportService.SFI_SOD, "SFI_SOD.bin");
+                tryReadFile(service, PassportService.SFI_CVCA, "SFI_CVCA.bin");
+
             } catch (Exception e) {
                 return e;
             }
             return null;
+        }
+
+        private void tryReadFile(PassportService service, short fid, String fileName) throws IOException {
+            try (CardFileInputStream inputStream = service.getInputStream(fid)) {
+                allFiles.add(new ParcelableFile(fileName,
+                        //IOUtils.toByteArray(inputStream)));
+                        ((LDSFile) LDSFileUtil.getLDSFile(fid, inputStream)).getEncoded()));
+            } catch (CardServiceException e) {
+                if (e.getSW() != ISO7816.SW_FILE_NOT_FOUND)
+                    Log.e("Exception", e.toString());
+            }
         }
 
         @Override
@@ -576,6 +661,8 @@ public class MainActivity extends AppCompatActivity {
                             Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, false));
                     }
                 }
+
+                intent.putParcelableArrayListExtra(ResultActivity.KEY_ALL_FILES, allFiles);
 
                 if (getCallingActivity() != null) {
                     setResult(Activity.RESULT_OK, intent);
